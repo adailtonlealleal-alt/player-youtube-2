@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>Player YouTube</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-main: #000000;
+      --bg-card: #0d0d11;
+      --accent-red: #ff0000;
+      --accent-blue: #0a84ff;
+      --text-main: #ffffff;
+      --text-muted: #9e9ea7;
+      --border-color: rgba(255, 255, 255, 0.1);
+      --radius: 14px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      overflow-x: hidden;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 960px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+
+    /* Moldura Principal do Vídeo */
+    .player-card {
+      width: 100%;
+      background: #000000;
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: 0 25px 70px rgba(0, 0, 0, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      position: relative;
+    }
+
+    .video-viewport {
+      position: relative;
+      width: 100%;
+      padding-top: 56.25%; /* 16:9 Aspect Ratio */
+      background: #000000;
+      overflow: hidden;
+    }
+
+    #playerSlot,
+    #nativeVideo {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: #000000;
+    }
+
+    #ytPlayerIframe {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: #000000;
+      pointer-events: auto; /* Permite que o botão 'Pular Anúncio' do YouTube receba o clique do usuário */
+    }
+
+    /* ESCUDO TRANSPARENTE INTELIGENTE SOBRE O VÍDEO: 
+       Protege 100% o topo (título, canal e links), o centro (para dar Play/Pause) e a logo do YouTube.
+       Deixa aberto com precisão cirúrgica o canto inferior direito para que qualquer pessoa consiga
+       clicar imediatamente no botão 'PULAR ANÚNCIO' sem ficar presa em comerciais! */
+    .click-shield {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 30;
+      background: transparent;
+      cursor: pointer;
+      clip-path: polygon(
+        0% 0%, 
+        100% 0%, 
+        100% calc(100% - 90px), 
+        calc(100% - 175px) calc(100% - 90px), 
+        calc(100% - 175px) 100%, 
+        0% 100%
+      );
+    }
+
+    /* Ícone central de Play/Pause ao clicar */
+    .center-indicator {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.8);
+      width: 72px;
+      height: 72px;
+      background: rgba(0, 0, 0, 0.7);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 35;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .center-indicator.show {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+
+    .center-indicator svg {
+      width: 32px;
+      height: 32px;
+      fill: #ffffff;
+    }
+
+    /* BARRA DE CONTROLES 100% PRÓPRIA (SEM NENHUM ÍCONE DO YOUTUBE) */
+    .custom-controls {
+      width: 100%;
+      background: #0a0a0d;
+      padding: 10px 18px 14px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    /* Barra de progresso (scrubber vermelho) */
+    .scrub-bar-container {
+      width: 100%;
+      height: 16px;
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .scrub-track {
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 2px;
+      position: relative;
+      transition: height 0.15s ease;
+    }
+
+    .scrub-bar-container:hover .scrub-track {
+      height: 6px;
+    }
+
+    .scrub-fill {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: 0%;
+      background: var(--accent-red);
+      border-radius: 2px;
+    }
+
+    .scrub-handle {
+      position: absolute;
+      top: 50%;
+      left: 0%;
+      transform: translate(-50%, -50%);
+      width: 13px;
+      height: 13px;
+      background: var(--accent-red);
+      border-radius: 50%;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+
+    .scrub-bar-container:hover .scrub-handle {
+      opacity: 1;
+    }
+
+    /* Linha de botões da barra */
+    .controls-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    .controls-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .controls-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .btn-ctrl {
+      background: transparent;
+      border: none;
+      color: #ffffff;
+      cursor: pointer;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.1s ease, color 0.15s ease;
+    }
+
+    .btn-ctrl:hover {
+      color: var(--accent-blue);
+      transform: scale(1.08);
+    }
+
+    .btn-ctrl:active {
+      transform: scale(0.95);
+    }
+
+    .btn-ctrl svg {
+      width: 22px;
+      height: 22px;
+      fill: currentColor;
+    }
+
+    .time-display {
+      font-size: 13px;
+      font-weight: 500;
+      color: #e4e4e7;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ========================================================
+       TELA CHEIA (FULLSCREEN) PERFEITA PARA SMARTPHONES (XIAOMI, SAMSUNG, IPHONE)
+       Corrige o corte de legendas e descentralização do vídeo
+       ======================================================== */
+    .player-card:fullscreen,
+    .player-card:-webkit-full-screen,
+    .video-viewport:fullscreen,
+    .video-viewport:-webkit-full-screen {
+      width: 100vw !important;
+      height: 100vh !important;
+      height: 100dvh !important;
+      max-width: 100vw !important;
+      max-height: 100vh !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      border: none !important;
+      border-radius: 0 !important;
+      background: #000000 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      justify-content: center !important;
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      overflow: hidden !important;
+      box-shadow: none !important;
+    }
+
+    .player-card:fullscreen .video-viewport,
+    .player-card:-webkit-full-screen .video-viewport {
+      width: 100vw !important;
+      height: 100vh !important;
+      height: 100dvh !important;
+      padding-top: 0 !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+    }
+
+    .player-card:fullscreen #nativeVideo,
+    .player-card:-webkit-full-screen #nativeVideo,
+    .player-card:fullscreen #playerSlot,
+    .player-card:-webkit-full-screen #playerSlot,
+    .player-card:fullscreen #ytPlayerIframe,
+    .player-card:-webkit-full-screen #ytPlayerIframe,
+    .video-viewport:fullscreen #nativeVideo,
+    .video-viewport:-webkit-full-screen #nativeVideo {
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      height: 100dvh !important;
+      max-width: 100vw !important;
+      max-height: 100vh !important;
+      object-fit: contain !important;
+      object-position: center center !important;
+    }
+
+    /* Controles flutuantes em tela cheia com gradiente suave */
+    .player-card:fullscreen .custom-controls,
+    .player-card:-webkit-full-screen .custom-controls {
+      position: absolute !important;
+      bottom: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
+      z-index: 50 !important;
+      background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.88) 100%) !important;
+      border-top: none !important;
+      padding: 12px 24px calc(env(safe-area-inset-bottom, 14px) + 10px) 24px !important;
+      transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease !important;
+    }
+
+    .player-card:fullscreen .meta-card,
+    .player-card:-webkit-full-screen .meta-card {
+      display: none !important;
+    }
+
+    .controls-hidden {
+      opacity: 0 !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+      transform: translateY(15px) !important;
+    }
+
+    /* MODO PAISAGEM AUTOMÁTICO PARA CELULAR (Ao girar o Xiaomi de lado) */
+    @media (max-height: 540px) and (orientation: landscape) {
+      body {
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: hidden !important;
+        justify-content: center !important;
+      }
+      .container {
+        max-width: 100% !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        gap: 0 !important;
+      }
+      .player-card {
+        border-radius: 0 !important;
+        border: none !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        width: 100vw !important;
+        box-shadow: none !important;
+      }
+      .video-viewport {
+        padding-top: 0 !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        width: 100vw !important;
+      }
+      #nativeVideo, #playerSlot, #ytPlayerIframe {
+        width: 100vw !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        object-fit: contain !important;
+        object-position: center center !important;
+      }
+      .custom-controls {
+        position: absolute !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        z-index: 50 !important;
+        background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.88) 100%) !important;
+        border-top: none !important;
+        padding: 10px 24px calc(env(safe-area-inset-bottom, 12px) + 8px) 24px !important;
+        transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease !important;
+      }
+      .meta-card {
+        display: none !important;
+      }
+    }
+
+    /* Detalhes da Música: APENAS CANTOR E NOME DA MÚSICA */
+    .meta-card {
+      width: 100%;
+      padding: 22px 26px;
+      background: linear-gradient(180deg, #111116 0%, #09090c 100%);
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .meta-tag {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent-blue);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .meta-artist {
+      font-size: 1.65rem;
+      font-weight: 800;
+      color: #ffffff;
+      line-height: 1.25;
+      letter-spacing: -0.01em;
+    }
+
+    .meta-track {
+      font-size: 1.15rem;
+      font-weight: 500;
+      color: #d1d5db;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .meta-year {
+      font-size: 0.85rem;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 2px 8px;
+      border-radius: 4px;
+      color: #e4e4e7;
+    }
+
+    /* Tela para quando a página é aberta sem link no endereço */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      color: #40404a;
+      padding: 60px 20px;
+      text-align: center;
+    }
+
+    .empty-state svg {
+      width: 64px;
+      height: 64px;
+      fill: #222228;
+    }
+
+    .empty-state p {
+      font-size: 15px;
+      font-weight: 500;
+      color: #52525b;
+      letter-spacing: 0.02em;
+    }
+  </style>
+</head>
+<body oncontextmenu="return false;">
+
+<div class="container" id="mainContainer">
+
+  <!-- Player Principal -->
+  <div class="player-card" id="playerCard" style="display: none;">
+    
+    <div class="video-viewport" id="viewport">
+      <!-- Slot onde o iframe do YouTube roda com controls=0 -->
+      <div id="playerSlot"></div>
+
+      <!-- Vídeo Nativo para links GitHub Releases, YouCine e Streams MP4 diretos -->
+      <video id="nativeVideo" preload="metadata" playsinline style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;background:#000;pointer-events:none;"></video>
+
+      <!-- ESCUDO TRANSPARENTE TOTAL: Bloqueia 100% qualquer clique que abriria o YouTube -->
+      <div class="click-shield" id="clickShield"></div>
+
+      <!-- Indicador de Play/Pause central ao clicar no vídeo -->
+      <div class="center-indicator" id="centerIndicator">
+        <svg id="indicatorIcon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      </div>
+    </div>
+
+    <!-- CONTROLES NATIVOS PRÓPRIOS (SEM NENHUM ÍCONE DO YOUTUBE) -->
+    <div class="custom-controls">
+      <!-- Barra de progresso vermelha -->
+      <div class="scrub-bar-container" id="scrubContainer">
+        <div class="scrub-track">
+          <div class="scrub-fill" id="scrubFill"></div>
+          <div class="scrub-handle" id="scrubHandle"></div>
+        </div>
+      </div>
+
+      <!-- Botões de Reprodução -->
+      <div class="controls-row">
+        <div class="controls-left">
+          <!-- Play / Pause -->
+          <button class="btn-ctrl" id="btnPlayPause" title="Play / Pause">
+            <svg id="playPauseIcon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+
+          <!-- Mute / Unmute -->
+          <button class="btn-ctrl" id="btnMute" title="Mudo">
+            <svg id="volumeIcon" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+          </button>
+
+          <!-- Tempo: 0:24 / 4:43 -->
+          <div class="time-display">
+            <span id="currentTime">0:00</span> / <span id="totalTime">0:00</span>
+          </div>
+        </div>
+
+        <div class="controls-right">
+          <!-- Botão Tela Cheia -->
+          <button class="btn-ctrl" id="btnFs" title="Tela Cheia">
+            <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Metadados: SOMENTE CANTOR E MÚSICA (CANAL DO CRIADOR NUNCA APARECE) -->
+    <div class="meta-card" id="metaCard">
+      <div class="meta-tag">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+        Cantor / Artista
+      </div>
+      <div class="meta-artist" id="artistDisplay">-</div>
+      <div class="meta-track">
+        <span id="trackDisplay">-</span>
+        <span class="meta-year" id="yearDisplay" style="display: none;">-</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tela quando aberta sem link na barra (Privado: sem acesso para ninguém) -->
+  <div class="empty-state" id="emptyState">
+    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+    <p>Nenhum vídeo carregado</p>
+  </div>
+
+</div>
+
+<!-- Carrega a API Iframe oficial do YouTube -->
+<script src="https://www.youtube.com/iframe_api"></script>
+
+<script>
+  let ytPlayer = null;
+  let isApiReady = false;
+  let isPlaying = false;
+  let isMuted = false;
+  let progressInterval = null;
+  let currentVideoId = null;
+  let wakeLock = null;
+  let fallbackWakeVideo = null;
+
+  // Bloqueio de desligamento da tela (Wake Lock) para celular
+  async function requestWakeLock() {
+    if ('wakeLock' in navigator) {
+      try {
+        if (!wakeLock || wakeLock.released) {
+          wakeLock = await navigator.wakeLock.request('screen');
+          wakeLock.addEventListener('release', () => {
+            wakeLock = null;
+          });
+        }
+      } catch (err) {
+        console.log('WakeLock nativo:', err.message);
+      }
+    } else {
+      // Fallback para navegadores antigos / webviews sem suporte direto
+      try {
+        if (!fallbackWakeVideo) {
+          fallbackWakeVideo = document.createElement('video');
+          fallbackWakeVideo.setAttribute('playsinline', '');
+          fallbackWakeVideo.setAttribute('webkit-playsinline', '');
+          fallbackWakeVideo.setAttribute('loop', '');
+          fallbackWakeVideo.setAttribute('muted', '');
+          fallbackWakeVideo.muted = true;
+          fallbackWakeVideo.style.cssText = 'position:fixed;width:1px;height:1px;left:-9999px;top:-9999px;opacity:0;pointer-events:none;';
+          fallbackWakeVideo.src = 'data:video/mp4;base64,AAAAHGZ0eXBpc29tAAAAAGlzb21tcDQxAAAACHZtZWhkAAAAAAAABnN0dHMAAAAAAAAAAHYAAAAgc3RzegAAAAAAAAAAAAAAAHgAAAAUc3RjbwAAAAAAAAABAAAALAAAAG1kYXQ=';
+          document.body.appendChild(fallbackWakeVideo);
+        }
+        fallbackWakeVideo.play().catch(() => {});
+      } catch (e) {}
+    }
+  }
+
+  async function releaseWakeLock() {
+    if (wakeLock && !wakeLock.released) {
+      try {
+        await wakeLock.release();
+      } catch (err) {}
+      wakeLock = null;
+    }
+    if (fallbackWakeVideo) {
+      try {
+        fallbackWakeVideo.pause();
+      } catch (e) {}
+    }
+  }
+
+  // Se o usuário alternar de aplicativo ou minimizar e voltar enquanto o clipe toca, reativa o wake lock
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && isPlaying) {
+      requestWakeLock();
+    }
+  });
+
+  const playerCard = document.getElementById('playerCard');
+  const emptyState = document.getElementById('emptyState');
+  const viewport = document.getElementById('viewport');
+  const nativeVideo = document.getElementById('nativeVideo');
+  const clickShield = document.getElementById('clickShield');
+  const centerIndicator = document.getElementById('centerIndicator');
+  const indicatorIcon = document.getElementById('indicatorIcon');
+  let isNative = false;
+
+  const btnPlayPause = document.getElementById('btnPlayPause');
+  const playPauseIcon = document.getElementById('playPauseIcon');
+  const btnMute = document.getElementById('btnMute');
+  const volumeIcon = document.getElementById('volumeIcon');
+  const currentTimeDisplay = document.getElementById('currentTime');
+  const totalTimeDisplay = document.getElementById('totalTime');
+  const scrubContainer = document.getElementById('scrubContainer');
+  const scrubFill = document.getElementById('scrubFill');
+  const scrubHandle = document.getElementById('scrubHandle');
+  const btnFs = document.getElementById('btnFs');
+
+  const artistDisplay = document.getElementById('artistDisplay');
+  const trackDisplay = document.getElementById('trackDisplay');
+  const yearDisplay = document.getElementById('yearDisplay');
+
+  // Bloqueia clique direito em toda a página para ninguém inspecionar ou copiar link
+  document.addEventListener('contextmenu', e => e.preventDefault());
+
+  // Formata segundos em MM:SS ou HH:MM:SS
+  function formatTime(seconds) {
+    if (!seconds || isNaN(seconds)) return "0:00";
+    const totalSecs = Math.floor(seconds);
+    const hours = Math.floor(totalSecs / 3600);
+    const mins = Math.floor((totalSecs % 3600) / 60);
+    const secs = totalSecs % 60;
+    const pad = (n) => (n < 10 ? '0' + n : n);
+    if (hours > 0) {
+      return `${hours}:${pad(mins)}:${pad(secs)}`;
+    }
+    return `${mins}:${pad(secs)}`;
+  }
+
+  const customControls = document.querySelector('.custom-controls');
+  let controlsHideTimeout = null;
+
+  function showControls() {
+    customControls.classList.remove('controls-hidden');
+    resetControlsHideTimer();
+  }
+
+  function hideControls() {
+    const isFs = document.fullscreenElement || document.webkitFullscreenElement || (window.innerHeight < 540 && window.innerWidth > window.innerHeight);
+    if (isFs && isPlaying) {
+      customControls.classList.add('controls-hidden');
+    }
+  }
+
+  function resetControlsHideTimer() {
+    clearTimeout(controlsHideTimeout);
+    const isFs = document.fullscreenElement || document.webkitFullscreenElement || (window.innerHeight < 540 && window.innerWidth > window.innerHeight);
+    if (isFs && isPlaying) {
+      controlsHideTimeout = setTimeout(() => {
+        hideControls();
+      }, 3500);
+    }
+  }
+
+  // Toque no vídeo em tela cheia reexibe os controles
+  viewport.addEventListener('touchstart', () => {
+    showControls();
+  }, { passive: true });
+
+  document.addEventListener('mousemove', () => {
+    showControls();
+  });
+
+  // Atualiza ícone do botão de Tela Cheia ao entrar / sair
+  function onFullscreenChange() {
+    const isFs = document.fullscreenElement || document.webkitFullscreenElement;
+    const fsIcon = btnFs.querySelector('svg');
+    if (isFs) {
+      // Ícone sair de tela cheia
+      fsIcon.innerHTML = '<path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>';
+      showControls();
+    } else {
+      // Ícone entrar em tela cheia
+      fsIcon.innerHTML = '<path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>';
+      customControls.classList.remove('controls-hidden');
+    }
+  }
+
+  document.addEventListener('fullscreenchange', onFullscreenChange);
+  document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+
+  // Tela Cheia Inteligente para Celulares e Desktop
+  btnFs.onclick = async () => {
+    const isFs = document.fullscreenElement || document.webkitFullscreenElement;
+    if (!isFs) {
+      try {
+        if (playerCard.requestFullscreen) {
+          await playerCard.requestFullscreen();
+        } else if (playerCard.webkitRequestFullscreen) {
+          await playerCard.webkitRequestFullscreen();
+        } else if (viewport.requestFullscreen) {
+          await viewport.requestFullscreen();
+        } else if (nativeVideo.webkitEnterFullscreen) {
+          nativeVideo.webkitEnterFullscreen();
+        }
+
+        // No Xiaomi/Android, trava em modo paisagem horizontal
+        if (screen.orientation && screen.orientation.lock) {
+          screen.orientation.lock('landscape').catch(() => {});
+        }
+      } catch (err) {
+        console.log("Erro fullscreen:", err);
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      }
+      if (screen.orientation && screen.orientation.unlock) {
+        screen.orientation.unlock();
+      }
+    }
+  };
+
+  // Extrai ID do vídeo de qualquer link
+  function extractYouTubeId(url) {
+    if (!url) return null;
+    const str = url.trim();
+
+    const vMatch = str.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+    if (vMatch) return vMatch[1];
+
+    const beMatch = str.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
+    if (beMatch) return beMatch[1];
+
+    const embMatch = str.match(/(?:embed|shorts|\/v\/)([a-zA-Z0-9_-]{11})/);
+    if (embMatch) return embMatch[1];
+
+    if (/^[a-zA-Z0-9_-]{11}$/.test(str)) return str;
+
+    return null;
+  }
+
+  // Limpa o título bruto e extrai SOMENTE o Cantor e a Música
+  function parseArtistAndSong(rawTitle) {
+    let title = (rawTitle || '').trim();
+
+    title = title.replace(/^[\s\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}🎵🎶🎧🔥✨🌟🖤❤️🚂]+/gu, '').trim();
+    title = title.replace(/[\s\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}🎵🎶🎧🔥✨🌟🖤❤️🚂]+$/gu, '').trim();
+    title = title.replace(/^[“"']+|[”"']+$/g, '').trim();
+
+    let artist = '';
+    let track = '';
+    let year = '';
+
+    const yearMatch = title.match(/\b(19\d\d|20\d\d)\b/);
+    if (yearMatch) year = yearMatch[1];
+
+    const byMatch = title.match(/^(.+?)\s+by\s+(.+)$/i);
+    const dotMatch = title.match(/^(.+?)\s+[·•]\s+(.+)$/);
+    const dashMatch = title.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+
+    if (byMatch) {
+      track = byMatch[1].replace(/^[“"']+|[”"']+$/g, '').trim();
+      artist = byMatch[2].replace(/^[“"']+|[”"']+$/g, '').trim();
+    } else if (dotMatch) {
+      track = dotMatch[1].replace(/^[“"']+|[”"']+$/g, '').trim();
+      artist = dotMatch[2].replace(/^[“"']+|[”"']+$/g, '').trim();
+    } else if (dashMatch) {
+      artist = dashMatch[1].replace(/^[“"']+|[”"']+$/g, '').trim();
+      track = dashMatch[2].replace(/^[“"']+|[”"']+$/g, '').trim();
+    } else {
+      track = title;
+      artist = 'Cantor / Artista';
+    }
+
+    artist = artist.replace(/^by\s+/i, '').trim();
+    artist = artist.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}]/gu, '').trim();
+    artist = artist.replace(/^[“"']+|[”"']+$/g, '').trim();
+
+    track = track.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}]/gu, '').trim();
+    track = track.replace(/\b(4K|RARE|HD|HQ|REMASTERED|OFFICIAL VIDEO|CLIPE OFICIAL|VÍDEO OFICIAL)\b/gi, '').trim();
+    track = track.replace(/^[“"']+|[”"']+$/g, '').trim();
+
+    return { artist, track, year };
+  }
+
+  // API do YouTube carregada
+  window.onYouTubeIframeAPIReady = () => {
+    isApiReady = true;
+    lerLinkDaUrl();
+  };
+
+  // Inicializa o Player do YouTube com controls: 0 (sem nenhum botão ou link do YouTube)
+  function initYouTubePlayer(ytId) {
+    if (ytPlayer && currentVideoId === ytId) return;
+    currentVideoId = ytId;
+
+    document.getElementById('playerSlot').innerHTML = '<div id="ytPlayerIframe"></div>';
+
+    ytPlayer = new YT.Player('ytPlayerIframe', {
+      host: 'https://www.youtube-nocookie.com',
+      videoId: ytId,
+      playerVars: {
+        autoplay: 1,
+        controls: 0,        // DESLIGA TODOS OS CONTROLES DO YOUTUBE (Sem ícone de copiar link, sem logo!)
+        disablekb: 1,       // Desliga atalhos de teclado do YouTube
+        fs: 0,              // Desliga botão de tela cheia do YouTube
+        iv_load_policy: 3,  // Desliga anotações
+        modestbranding: 1,  // Remove logo do YouTube
+        rel: 0,             // Sem vídeos recomendados de outros canais
+        playsinline: 1,
+        enablejsapi: 1,
+        ...(window.location.origin && window.location.origin !== 'null' ? { origin: window.location.origin } : {})
+      },
+      events: {
+        'onReady': onPlayerReady,
+        'onStateChange': onPlayerStateChange
+      }
+    });
+  }
+
+  function onPlayerReady(event) {
+    event.target.playVideo();
+    startProgressTimer();
+    requestWakeLock();
+  }
+
+  function onPlayerStateChange(event) {
+    if (event.data === YT.PlayerState.PLAYING) {
+      isPlaying = true;
+      updatePlayPauseIcon(true);
+      startProgressTimer();
+      requestWakeLock(); // Trava a tela para ficar ligada durante o clipe
+    } else if (event.data === YT.PlayerState.PAUSED || event.data === YT.PlayerState.ENDED) {
+      isPlaying = false;
+      updatePlayPauseIcon(false);
+      stopProgressTimer();
+      releaseWakeLock(); // Libera a tela para o modo normal de economia de energia
+    }
+  }
+
+  // Atualiza ícone do botão Play/Pause
+  function updatePlayPauseIcon(playing) {
+    if (playing) {
+      playPauseIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>'; // Pausa
+      indicatorIcon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+    } else {
+      playPauseIcon.innerHTML = '<path d="M8 5v14l11-7z"/>'; // Play
+      indicatorIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+    }
+  }
+
+  // Alterna Play / Pause
+  function togglePlayPause() {
+    if (isNative) {
+      if (nativeVideo.paused) {
+        nativeVideo.play().then(() => {
+          isPlaying = true;
+          updatePlayPauseIcon(true);
+          requestWakeLock();
+        }).catch(err => console.log(err));
+      } else {
+        nativeVideo.pause();
+        isPlaying = false;
+        updatePlayPauseIcon(false);
+        releaseWakeLock();
+      }
+    } else {
+      if (!ytPlayer || !ytPlayer.playVideo) return;
+
+      if (isPlaying) {
+        ytPlayer.pauseVideo();
+        releaseWakeLock();
+      } else {
+        ytPlayer.playVideo();
+        requestWakeLock(); // Ativado pelo toque direto do usuário (gesto físico do celular)
+      }
+    }
+
+    // Pisca o indicador central
+    centerIndicator.classList.add('show');
+    setTimeout(() => centerIndicator.classList.remove('show'), 400);
+  }
+
+  // Clique no escudo transparente do vídeo dá Play/Pause
+  clickShield.onclick = togglePlayPause;
+  btnPlayPause.onclick = togglePlayPause;
+
+  // Alterna Mudo
+  btnMute.onclick = () => {
+    if (isNative) {
+      nativeVideo.muted = !nativeVideo.muted;
+      if (nativeVideo.muted) {
+        volumeIcon.innerHTML = '<path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>';
+      } else {
+        volumeIcon.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>';
+      }
+      return;
+    }
+    if (!ytPlayer || !ytPlayer.isMuted) return;
+    if (ytPlayer.isMuted()) {
+      ytPlayer.unMute();
+      volumeIcon.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>';
+    } else {
+      ytPlayer.mute();
+      volumeIcon.innerHTML = '<path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>';
+    }
+  };
+
+  // Atualiza barra de progresso em tempo real
+  function startProgressTimer() {
+    stopProgressTimer();
+    progressInterval = setInterval(() => {
+      if (ytPlayer && ytPlayer.getCurrentTime && ytPlayer.getDuration) {
+        const cur = ytPlayer.getCurrentTime();
+        const dur = ytPlayer.getDuration();
+        currentTimeDisplay.textContent = formatTime(cur);
+        totalTimeDisplay.textContent = formatTime(dur);
+
+        if (dur > 0) {
+          const pct = (cur / dur) * 100;
+          scrubFill.style.width = pct + '%';
+          scrubHandle.style.left = pct + '%';
+        }
+      }
+    }, 250);
+  }
+
+  function stopProgressTimer() {
+    if (progressInterval) clearInterval(progressInterval);
+  }
+
+  // Clicar na barra de progresso para avançar / retroceder
+  scrubContainer.onclick = (e) => {
+    const rect = scrubContainer.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const pct = Math.max(0, Math.min(1, clickX / rect.width));
+
+    if (isNative) {
+      if (nativeVideo.duration > 0) {
+        nativeVideo.currentTime = nativeVideo.duration * pct;
+        scrubFill.style.width = (pct * 100) + '%';
+        scrubHandle.style.left = (pct * 100) + '%';
+      }
+      return;
+    }
+
+    if (!ytPlayer || !ytPlayer.getDuration) return;
+    const dur = ytPlayer.getDuration();
+    if (dur > 0) {
+      ytPlayer.seekTo(dur * pct, true);
+      scrubFill.style.width = (pct * 100) + '%';
+      scrubHandle.style.left = (pct * 100) + '%';
+    }
+  };
+
+  // Carrega o vídeo solicitado
+  async function carregarVideo(url) {
+    if (!url || !url.trim()) {
+      playerCard.style.display = 'none';
+      emptyState.style.display = 'flex';
+      return;
+    }
+
+    const cleanUrl = url.trim();
+    const ytId = extractYouTubeId(cleanUrl);
+
+    if (ytId) {
+      isNative = false;
+      nativeVideo.style.display = 'none';
+      try { nativeVideo.pause(); } catch(e){}
+      document.getElementById('playerSlot').style.display = 'block';
+
+      emptyState.style.display = 'none';
+      playerCard.style.display = 'block';
+
+      if (isApiReady) {
+        initYouTubePlayer(ytId);
+      }
+
+      artistDisplay.textContent = 'Carregando cantor...';
+      trackDisplay.textContent = 'Carregando música...';
+      yearDisplay.style.display = 'none';
+
+      // Busca dados via NoEmbed (CRIADOR DO CANAL É IGNORADO!)
+      try {
+        const res = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${ytId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.title) {
+            const info = parseArtistAndSong(data.title);
+            artistDisplay.textContent = info.artist || 'Música';
+            trackDisplay.textContent = info.track || data.title;
+            if (info.year) {
+              yearDisplay.textContent = info.year;
+              yearDisplay.style.display = 'inline-block';
+            } else {
+              yearDisplay.style.display = 'none';
+            }
+            return;
+          }
+        }
+      } catch (e) {}
+
+      artistDisplay.textContent = 'Música';
+      trackDisplay.textContent = cleanUrl;
+      yearDisplay.style.display = 'none';
+
+    } else if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://') || cleanUrl.includes('.mp4') || cleanUrl.includes('/vod/')) {
+      // MODO YOUCINE / STREAM DIRETO
+      isNative = true;
+      document.getElementById('playerSlot').style.display = 'none';
+      if (ytPlayer && ytPlayer.pauseVideo) {
+        try { ytPlayer.pauseVideo(); } catch(e){}
+      }
+
+      emptyState.style.display = 'none';
+      playerCard.style.display = 'block';
+      nativeVideo.style.display = 'block';
+
+      let artistName = "Cinema Legendado";
+      let titleName = "Filme em Transmissão";
+      let yearBadge = "HD 1080p";
+
+      // Extrai nome do arquivo se for um link direto (.mp4, .mkv, github releases, etc)
+      const urlPath = cleanUrl.split('?')[0];
+      const filenameMatch = urlPath.match(/\/([^\/?#]+\.(?:mp4|mkv|webm|avi|mov))$/i) || urlPath.match(/\/([^\/?#]+)$/i);
+      
+      if (filenameMatch && filenameMatch[1] && !filenameMatch[1].includes('vod') && !filenameMatch[1].includes('playlist')) {
+        let rawName = decodeURIComponent(filenameMatch[1]);
+        rawName = rawName.replace(/\.(mp4|mkv|webm|avi|mov)$/i, '');
+        
+        // Verifica se tem ano no nome (ex: 2024, 2025)
+        const yearM = rawName.match(/\b(19\d\d|20\d\d)\b/);
+        if (yearM) {
+          yearBadge = yearM[1];
+        }
+
+        // Limpa separadores como pontos, hífens e underscores
+        let formattedTitle = rawName.replace(/[._-]+/g, ' ').trim();
+        titleName = formattedTitle;
+        artistName = "Filme / Cinema";
+      } else {
+        const codeMatch = cleanUrl.match(/media_code=([A-Z0-9]+)/i) || cleanUrl.match(/\/vod\/([A-Z0-9_]+)/i);
+        if (codeMatch) {
+          titleName = `Filme [${codeMatch[1].substring(0, 10)}]`;
+          artistName = "YouCine Cinema";
+        }
+      }
+
+      artistDisplay.textContent = artistName;
+      trackDisplay.textContent = titleName;
+      yearDisplay.textContent = yearBadge;
+      yearDisplay.style.display = 'inline-block';
+
+      nativeVideo.onerror = () => {
+        console.error("Erro ao carregar vídeo nativo:", nativeVideo.error);
+        trackDisplay.textContent = "Erro ao carregar o vídeo. Verifique se o link está acessível.";
+      };
+
+      nativeVideo.src = cleanUrl;
+
+      nativeVideo.onloadedmetadata = () => {
+        totalTimeDisplay.textContent = formatTime(nativeVideo.duration);
+      };
+
+      nativeVideo.ontimeupdate = () => {
+        if (nativeVideo.duration) {
+          currentTimeDisplay.textContent = formatTime(nativeVideo.currentTime);
+          const pct = (nativeVideo.currentTime / nativeVideo.duration) * 100;
+          scrubFill.style.width = pct + '%';
+          scrubHandle.style.left = pct + '%';
+        }
+      };
+
+      nativeVideo.onplay = () => {
+        isPlaying = true;
+        updatePlayPauseIcon(true);
+        requestWakeLock();
+      };
+
+      nativeVideo.onpause = () => {
+        isPlaying = false;
+        updatePlayPauseIcon(false);
+        releaseWakeLock();
+      };
+
+      nativeVideo.onended = () => {
+        isPlaying = false;
+        updatePlayPauseIcon(false);
+        releaseWakeLock();
+      };
+
+      nativeVideo.play().catch(err => {
+        console.log("Play automático aguardando toque do usuário:", err);
+      });
+
+    } else {
+      playerCard.style.display = 'none';
+      emptyState.style.display = 'flex';
+    }
+  }
+
+  // Pega o link após o # na barra de endereços do navegador
+  function lerLinkDaUrl() {
+    let link = '';
+
+    if (window.location.hash && window.location.hash.length > 1) {
+      link = decodeURIComponent(window.location.hash.substring(1));
+    }
+
+    if (!link) {
+      const params = new URLSearchParams(window.location.search);
+      link = params.get('v') || params.get('url');
+    }
+
+    carregarVideo(link);
+  }
+
+  window.onhashchange = lerLinkDaUrl;
+  window.onload = () => {
+    if (isApiReady) lerLinkDaUrl();
+  };
+</script>
+
+</body>
+</html>

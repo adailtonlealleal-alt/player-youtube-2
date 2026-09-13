@@ -492,6 +492,10 @@
       <!-- ESCUDO TRANSPARENTE TOTAL: Bloqueia 100% qualquer clique que abriria o YouTube -->
       <div class="click-shield" id="clickShield"></div>
 
+      <!-- Escudos de proteção para OK.ru: bloqueia links externos, popups e logos -->
+      <div class="shield-top" id="shieldTop" style="display:none;position:absolute;top:0;left:0;width:100%;height:54px;z-index:35;background:transparent;pointer-events:all;"></div>
+      <div class="shield-logo" id="shieldLogo" style="display:none;position:absolute;bottom:0;right:0;width:55px;height:50px;z-index:35;background:transparent;pointer-events:all;"></div>
+
       <!-- Indicador de Play/Pause central ao clicar no vídeo -->
       <div class="center-indicator" id="centerIndicator">
         <svg id="indicatorIcon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
@@ -644,6 +648,9 @@
   const scrubHandle = document.getElementById('scrubHandle');
   const btnFs = document.getElementById('btnFs');
 
+  const shieldTop = document.getElementById('shieldTop');
+  const shieldLogo = document.getElementById('shieldLogo');
+
   const artistDisplay = document.getElementById('artistDisplay');
   const trackDisplay = document.getElementById('trackDisplay');
   const yearDisplay = document.getElementById('yearDisplay');
@@ -751,7 +758,7 @@
     }
   };
 
-  // Extrai ID do vídeo de qualquer link
+  // Extrai ID do vídeo de qualquer link do YouTube
   function extractYouTubeId(url) {
     if (!url) return null;
     const str = url.trim();
@@ -767,6 +774,18 @@
 
     if (/^[a-zA-Z0-9_-]{11}$/.test(str)) return str;
 
+    return null;
+  }
+
+  // Extrai ID de vídeo do OK.ru
+  function extractOkRuId(url) {
+    if (!url) return null;
+    const str = url.trim();
+    const okMatch = str.match(/ok\.ru\/(?:video|videoembed)\/(\d+)/i);
+    if (okMatch) return okMatch[1];
+    const prefixMatch = str.match(/^ok:(\d+)/i);
+    if (prefixMatch) return prefixMatch[1];
+    if (/^\d{10,15}$/.test(str)) return str;
     return null;
   }
 
@@ -989,11 +1008,14 @@
     if (!url || !url.trim()) {
       playerCard.style.display = 'none';
       emptyState.style.display = 'flex';
+      if (shieldTop) shieldTop.style.display = 'none';
+      if (shieldLogo) shieldLogo.style.display = 'none';
       return;
     }
 
     const cleanUrl = url.trim();
     const ytId = extractYouTubeId(cleanUrl);
+    const okId = extractOkRuId(cleanUrl);
 
     if (ytId) {
       isNative = false;
@@ -1003,6 +1025,10 @@
 
       emptyState.style.display = 'none';
       playerCard.style.display = 'block';
+      customControls.style.display = 'flex';
+      clickShield.style.display = 'block';
+      if (shieldTop) shieldTop.style.display = 'none';
+      if (shieldLogo) shieldLogo.style.display = 'none';
 
       if (isApiReady) {
         initYouTubePlayer(ytId);
@@ -1036,6 +1062,44 @@
       trackDisplay.textContent = cleanUrl;
       yearDisplay.style.display = 'none';
 
+    } else if (okId) {
+      // MODO OK.RU 100% BLINDADO (SEM ACESSO A NENHUM LINK EXTERNO)
+      isNative = false;
+      nativeVideo.style.display = 'none';
+      try { nativeVideo.pause(); } catch(e){}
+      if (ytPlayer && ytPlayer.pauseVideo) {
+        try { ytPlayer.pauseVideo(); } catch(e){}
+      }
+
+      emptyState.style.display = 'none';
+      playerCard.style.display = 'block';
+      document.getElementById('playerSlot').style.display = 'block';
+
+      // Esconde controles externos para usar o player nativo embutido do OK.ru
+      customControls.style.display = 'none';
+      clickShield.style.display = 'none';
+
+      // Ativa escudos anti-clique no topo (bloqueia ícone 🔗 e crachá VK) e canto inferior (bloqueia logo OK)
+      if (shieldTop) shieldTop.style.display = 'block';
+      if (shieldLogo) shieldLogo.style.display = 'block';
+
+      // Insere iframe protegido com Sandbox (bloqueia popups, novas abas ou navegação para ok.ru)
+      document.getElementById('playerSlot').innerHTML = `
+        <iframe id="okPlayerIframe" 
+                src="https://ok.ru/videoembed/${okId}?autoplay=1" 
+                sandbox="allow-scripts allow-same-origin" 
+                allow="autoplay; fullscreen" 
+                allowfullscreen 
+                style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;background:#000;">
+        </iframe>
+      `;
+
+      artistDisplay.textContent = 'Desenhos / Vídeos';
+      trackDisplay.textContent = `Vídeo OK [${okId}]`;
+      yearDisplay.textContent = 'HD 1080p';
+      yearDisplay.style.display = 'inline-block';
+      requestWakeLock();
+
     } else if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://') || cleanUrl.includes('.mp4') || cleanUrl.includes('/vod/')) {
       // MODO YOUCINE / STREAM DIRETO
       isNative = true;
@@ -1047,6 +1111,10 @@
       emptyState.style.display = 'none';
       playerCard.style.display = 'block';
       nativeVideo.style.display = 'block';
+      customControls.style.display = 'flex';
+      clickShield.style.display = 'block';
+      if (shieldTop) shieldTop.style.display = 'none';
+      if (shieldLogo) shieldLogo.style.display = 'none';
 
       let artistName = "Cinema Legendado";
       let titleName = "Filme em Transmissão";

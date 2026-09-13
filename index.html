@@ -473,6 +473,49 @@
       color: #52525b;
       letter-spacing: 0.02em;
     }
+
+    /* Botão flutuante moderno de Ativar Áudio (OK.ru e celular) */
+    .ok-unmute-badge {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      z-index: 45;
+      background: linear-gradient(135deg, #0a84ff 0%, #0066cc 100%);
+      color: #ffffff;
+      padding: 9px 18px;
+      border-radius: 30px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      box-shadow: 0 4px 22px rgba(10, 132, 255, 0.6);
+      animation: pulseBadge 2.2s infinite ease-in-out;
+      transition: all 0.25s ease;
+      outline: none;
+    }
+
+    .ok-unmute-badge:hover {
+      transform: scale(1.06);
+      background: linear-gradient(135deg, #2b95ff 0%, #0077ee 100%);
+      box-shadow: 0 6px 28px rgba(10, 132, 255, 0.8);
+    }
+
+    .ok-unmute-badge:active {
+      transform: scale(0.96);
+    }
+
+    @keyframes pulseBadge {
+      0%, 100% {
+        box-shadow: 0 4px 20px rgba(10, 132, 255, 0.5);
+      }
+      50% {
+        box-shadow: 0 6px 30px rgba(10, 132, 255, 0.9);
+      }
+    }
   </style>
 </head>
 <body oncontextmenu="return false;">
@@ -492,9 +535,15 @@
       <!-- ESCUDO TRANSPARENTE TOTAL: Bloqueia 100% qualquer clique que abriria o YouTube -->
       <div class="click-shield" id="clickShield"></div>
 
-      <!-- Escudos de proteção para OK.ru: bloqueia links externos, popups e logos -->
-      <div class="shield-top" id="shieldTop" style="display:none;position:absolute;top:0;left:0;width:100%;height:54px;z-index:35;background:transparent;pointer-events:all;"></div>
-      <div class="shield-logo" id="shieldLogo" style="display:none;position:absolute;bottom:0;right:0;width:55px;height:50px;z-index:35;background:transparent;pointer-events:all;"></div>
+      <!-- Escudos de proteção para OK.ru: bloqueia links externos mantendo o botão de som (topo esquerdo) e engrenagem ⚙️ (resolução) 100% livres -->
+      <div class="shield-top-center" id="shieldTopCenter" style="display:none;position:absolute;top:0;left:18%;width:62%;height:52px;z-index:35;background:transparent;pointer-events:all;" title="Bloqueio VK"></div>
+      <div class="shield-top-right" id="shieldTopRight" style="display:none;position:absolute;top:0;right:0;width:85px;height:52px;z-index:35;background:transparent;pointer-events:all;" title="Bloqueio Compartilhar"></div>
+
+      <!-- Botão flutuante para Ativar Som no Celular -->
+      <button class="ok-unmute-badge" id="okUnmuteBtn" style="display:none;" title="Toque para ativar o som">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+        <span>Toque para Ativar Som</span>
+      </button>
 
       <!-- Indicador de Play/Pause central ao clicar no vídeo -->
       <div class="center-indicator" id="centerIndicator">
@@ -648,8 +697,50 @@
   const scrubHandle = document.getElementById('scrubHandle');
   const btnFs = document.getElementById('btnFs');
 
-  const shieldTop = document.getElementById('shieldTop');
-  const shieldLogo = document.getElementById('shieldLogo');
+  const shieldTopCenter = document.getElementById('shieldTopCenter');
+  const shieldTopRight = document.getElementById('shieldTopRight');
+  const okUnmuteBtn = document.getElementById('okUnmuteBtn');
+  let okBadgeTimeout = null;
+
+  function hideOkElements() {
+    if (shieldTopCenter) shieldTopCenter.style.display = 'none';
+    if (shieldTopRight) shieldTopRight.style.display = 'none';
+    if (okUnmuteBtn) {
+      okUnmuteBtn.style.display = 'none';
+      okUnmuteBtn.style.opacity = '1';
+    }
+    if (okBadgeTimeout) {
+      clearTimeout(okBadgeTimeout);
+      okBadgeTimeout = null;
+    }
+  }
+
+  function unmuteOkVideo() {
+    const iframe = document.getElementById('okPlayerIframe');
+    if (iframe && iframe.contentWindow) {
+      iframe.contentWindow.postMessage({ method: 'unmute' }, '*');
+      iframe.contentWindow.postMessage({ method: 'set_volume', volume: 1 }, '*');
+      iframe.contentWindow.postMessage({ call: 'toggleMute', val: false }, '*');
+    }
+    if (okUnmuteBtn) {
+      okUnmuteBtn.style.opacity = '0';
+      setTimeout(() => { okUnmuteBtn.style.display = 'none'; }, 300);
+    }
+  }
+
+  if (okUnmuteBtn) {
+    okUnmuteBtn.onclick = unmuteOkVideo;
+  }
+
+  // Oculta o botão flutuante assim que o áudio for ligado
+  window.addEventListener('message', (e) => {
+    if (e.data && (e.data.event === 'volumechange' || (e.data.muted === false && e.data.volume > 0))) {
+      if (okUnmuteBtn) {
+        okUnmuteBtn.style.opacity = '0';
+        setTimeout(() => { okUnmuteBtn.style.display = 'none'; }, 300);
+      }
+    }
+  });
 
   const artistDisplay = document.getElementById('artistDisplay');
   const trackDisplay = document.getElementById('trackDisplay');
@@ -1008,8 +1099,7 @@
     if (!url || !url.trim()) {
       playerCard.style.display = 'none';
       emptyState.style.display = 'flex';
-      if (shieldTop) shieldTop.style.display = 'none';
-      if (shieldLogo) shieldLogo.style.display = 'none';
+      hideOkElements();
       return;
     }
 
@@ -1027,8 +1117,7 @@
       playerCard.style.display = 'block';
       customControls.style.display = 'flex';
       clickShield.style.display = 'block';
-      if (shieldTop) shieldTop.style.display = 'none';
-      if (shieldLogo) shieldLogo.style.display = 'none';
+      hideOkElements();
 
       if (isApiReady) {
         initYouTubePlayer(ytId);
@@ -1079,16 +1168,28 @@
       customControls.style.display = 'none';
       clickShield.style.display = 'none';
 
-      // Ativa escudos anti-clique no topo (bloqueia ícone 🔗 e crachá VK) e canto inferior (bloqueia logo OK)
-      if (shieldTop) shieldTop.style.display = 'block';
-      if (shieldLogo) shieldLogo.style.display = 'block';
+      // Ativa escudos anti-clique cirúrgicos (centro VK e topo direito compartilhar)
+      // Mantém o botão de som (topo esquerdo) e a engrenagem de resolução ⚙️ 100% livres
+      hideOkElements();
+      if (shieldTopCenter) shieldTopCenter.style.display = 'block';
+      if (shieldTopRight) shieldTopRight.style.display = 'block';
+      if (okUnmuteBtn) {
+        okUnmuteBtn.style.display = 'flex';
+        okUnmuteBtn.style.opacity = '1';
+        okBadgeTimeout = setTimeout(() => {
+          if (okUnmuteBtn && okUnmuteBtn.style.display !== 'none') {
+            okUnmuteBtn.style.opacity = '0';
+            setTimeout(() => { okUnmuteBtn.style.display = 'none'; }, 500);
+          }
+        }, 9000);
+      }
 
       // Insere iframe protegido com Sandbox (bloqueia popups, novas abas ou navegação para ok.ru)
       document.getElementById('playerSlot').innerHTML = `
         <iframe id="okPlayerIframe" 
                 src="https://ok.ru/videoembed/${okId}?autoplay=1" 
                 sandbox="allow-scripts allow-same-origin" 
-                allow="autoplay; fullscreen" 
+                allow="autoplay; fullscreen; encrypted-media; picture-in-picture" 
                 allowfullscreen 
                 style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;background:#000;">
         </iframe>
@@ -1096,8 +1197,9 @@
 
       artistDisplay.textContent = 'Desenhos / Vídeos';
       trackDisplay.textContent = `Vídeo OK [${okId}]`;
-      yearDisplay.textContent = 'HD 1080p';
+      yearDisplay.innerHTML = '⚙️ HD 1080p';
       yearDisplay.style.display = 'inline-block';
+      yearDisplay.title = 'Para travar em HD 1080p, toque na engrenagem ⚙️ no controle do vídeo';
       requestWakeLock();
 
     } else if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://') || cleanUrl.includes('.mp4') || cleanUrl.includes('/vod/')) {
@@ -1113,8 +1215,7 @@
       nativeVideo.style.display = 'block';
       customControls.style.display = 'flex';
       clickShield.style.display = 'block';
-      if (shieldTop) shieldTop.style.display = 'none';
-      if (shieldLogo) shieldLogo.style.display = 'none';
+      hideOkElements();
 
       let artistName = "Cinema Legendado";
       let titleName = "Filme em Transmissão";
